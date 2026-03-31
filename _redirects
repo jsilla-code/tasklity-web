@@ -1,0 +1,10 @@
+# ── Tasklity · Netlify Redirects ──────────────────────────
+# Aquí irán las rutas de cada app que añadas.
+# Ejemplo (descomenta cuando subas la app):
+# /mis-vacaciones    /mis-vacaciones/index.html    200
+# /mis-vacaciones/   /mis-vacaciones/index.html    200
+# /taskflow          /taskflow/index.html           200
+# /taskflow/         /taskflow/index.html           200
+
+# Fallback: cualquier ruta no encontrada vuelve al inicio
+/*    /index.html    200
