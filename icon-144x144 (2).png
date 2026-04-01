@@ -1,0 +1,96 @@
+// ============================================================
+//  Service Worker — Mis Vacaciones PWA
+//  Estrategia: Cache-first para assets, Network-first para CDN
+// ============================================================
+
+const CACHE_NAME = 'mis-vacaciones-v1';
+
+// Recursos locales que siempre queremos cachear
+const STATIC_ASSETS = [
+  './index.html',
+  './manifest.json',
+  './icons/icon-192x192.png',
+  './icons/icon-512x512.png',
+];
+
+// URLs de CDN que pre-cacheamos al instalar
+const CDN_ASSETS = [
+  'https://cdn.tailwindcss.com',
+  'https://unpkg.com/@babel/standalone/babel.min.js',
+  'https://esm.sh/react@18',
+  'https://esm.sh/react-dom@18/client',
+  'https://esm.sh/lucide-react@0.383.0',
+];
+
+// ── Install: pre-cachea los assets locales ──────────────────
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('[SW] Pre-cacheando assets locales…');
+      return cache.addAll(STATIC_ASSETS);
+    }).then(() => self.skipWaiting())
+  );
+});
+
+// ── Activate: limpia cachés antiguas ───────────────────────
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => {
+            console.log('[SW] Eliminando caché antigua:', key);
+            return caches.delete(key);
+          })
+      )
+    ).then(() => self.clients.claim())
+  );
+});
+
+// ── Fetch: Cache-first para todo ────────────────────────────
+self.addEventListener('fetch', (event) => {
+  // Solo interceptamos GET
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+
+  // Para navegación (HTML), intentamos red primero para tener la última versión
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // Para todo lo demás: Cache-first, luego red con guardado en caché
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+
+      return fetch(event.request)
+        .then((response) => {
+          // Solo cacheamos respuestas válidas
+          if (!response || response.status !== 200) return response;
+
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            try { cache.put(event.request, clone); } catch (e) { /* cors opaque */ }
+          });
+          return response;
+        })
+        .catch(() => {
+          // Si falla la red y no hay caché, devolvemos la app
+          if (event.request.destination === 'document') {
+            return caches.match('./index.html');
+          }
+        });
+    })
+  );
+});
